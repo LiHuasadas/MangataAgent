@@ -1,0 +1,9 @@
+-r requirements-api.txt
+openai>=1.0
+tiktoken>=0.7
+numpy>=1.26
+scikit-learn>=1.4
+httpx>=0.27
+websockets>=13.0
+fastmcp>=2.0
+qdrant-client>=1.6
