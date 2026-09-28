@@ -13,6 +13,7 @@ import hashlib
 import os
 import random
 import logging
+import threading
 
 logger = logging.getLogger(__name__)
 
@@ -81,71 +82,62 @@ class PerceptualMemory(BaseMemory):
         self.text_embedder = get_text_embedder()
         self.vector_dim = get_dimension(getattr(self.text_embedder, 'dimension', 384))
 
-        # 可选加载：图像CLIP与音频CLAP（缺依赖则优雅降级为哈希编码）
+        # Load each multimodal model only when its modality is first used.
         self._clip_model = None
         self._clip_processor = None
         self._clap_model = None
         self._clap_processor = None
         self._image_dim = None
         self._audio_dim = None
-        try:
-            from transformers import CLIPModel, CLIPProcessor
-            clip_name = os.getenv("CLIP_MODEL", "openai/clip-vit-base-patch32")
-            self._clip_model = CLIPModel.from_pretrained(clip_name)
-            self._clip_processor = CLIPProcessor.from_pretrained(clip_name)
-            # 估计输出维度
-            self._image_dim = self._clip_model.config.projection_dim if hasattr(self._clip_model.config, 'projection_dim') else 512
-        except Exception:
-            self._clip_model = None
-            self._clip_processor = None
-            self._image_dim = self.vector_dim
-        try:
-            from transformers import ClapProcessor, ClapModel
-            clap_name = os.getenv("CLAP_MODEL", "laion/clap-htsat-unfused")
-            self._clap_model = ClapModel.from_pretrained(clap_name)
-            self._clap_processor = ClapProcessor.from_pretrained(clap_name)
-            # 估计输出维度
-            self._audio_dim = getattr(self._clap_model.config, 'projection_dim', None) or 512
-        except Exception:
-            self._clap_model = None
-            self._clap_processor = None
-            self._audio_dim = self.vector_dim
+        self._modality_lock = threading.RLock()
 
         # 向量存储（Qdrant）— 按模态拆分集合，避免维度冲突，使用连接管理器避免重复连接
-        from ..storage.qdrant_store import QdrantConnectionManager
-        qdrant_url = os.getenv("QDRANT_URL")
-        qdrant_api_key = os.getenv("QDRANT_API_KEY")
-        base_collection = os.getenv("QDRANT_COLLECTION", "hello_agents_vectors")
-        distance = os.getenv("QDRANT_DISTANCE", "cosine")
-        
         self.vector_stores: Dict[str, QdrantVectorStore] = {}
-        # 文本集合
-        self.vector_stores["text"] = QdrantConnectionManager.get_instance(
-            url=qdrant_url,
-            api_key=qdrant_api_key,
-            collection_name=f"{base_collection}_perceptual_text",
-            vector_size=self.vector_dim,
-            distance=distance
-        )
-        # 图像集合（若CLIP不可用，维度退化为text维度）
-        self.vector_stores["image"] = QdrantConnectionManager.get_instance(
-            url=qdrant_url,
-            api_key=qdrant_api_key,
-            collection_name=f"{base_collection}_perceptual_image",
-            vector_size=int(self._image_dim or self.vector_dim),
-            distance=distance
-        )
-        # 音频集合（若CLAP不可用，维度退化为text维度）
-        self.vector_stores["audio"] = QdrantConnectionManager.get_instance(
-            url=qdrant_url,
-            api_key=qdrant_api_key,
-            collection_name=f"{base_collection}_perceptual_audio",
-            vector_size=int(self._audio_dim or self.vector_dim),
-            distance=distance
-        )
+        self._ensure_modality_ready("text")
         
         # 编码器（轻量实现；真实场景可替换为CLIP/CLAP等）
         self.encoders = self._init_encoders()
+
+    def _ensure_modality_ready(self, modality: str) -> None:
+        """Load a modality model and its matching vector store once, on first use."""
+        mod = modality if modality in {"image", "audio"} else "text"
+        if mod in self.vector_stores:
+            return
+        with self._modality_lock:
+            if mod in self.vector_stores:
+                return
+            local_files_only = os.getenv("PERCEPTUAL_ALLOW_MODEL_DOWNLOAD", "false").lower() not in ("1", "true", "yes")
+            if mod == "image":
+                try:
+                    from transformers import CLIPModel, CLIPProcessor
+                    name = os.getenv("CLIP_MODEL", "openai/clip-vit-base-patch32")
+                    self._clip_model = CLIPModel.from_pretrained(name, local_files_only=local_files_only)
+                    self._clip_processor = CLIPProcessor.from_pretrained(name, local_files_only=local_files_only)
+                    self._image_dim = getattr(self._clip_model.config, "projection_dim", None) or 512
+                except Exception as exc:
+                    self._clip_model = self._clip_processor = None
+                    self._image_dim = self.vector_dim
+                    logger.warning("CLIP 不可用，图像记忆使用哈希编码: %s", exc)
+            elif mod == "audio":
+                try:
+                    from transformers import ClapProcessor, ClapModel
+                    name = os.getenv("CLAP_MODEL", "laion/clap-htsat-unfused")
+                    self._clap_model = ClapModel.from_pretrained(name, local_files_only=local_files_only)
+                    self._clap_processor = ClapProcessor.from_pretrained(name, local_files_only=local_files_only)
+                    self._audio_dim = getattr(self._clap_model.config, "projection_dim", None) or 512
+                except Exception as exc:
+                    self._clap_model = self._clap_processor = None
+                    self._audio_dim = self.vector_dim
+                    logger.warning("CLAP 不可用，音频记忆使用哈希编码: %s", exc)
+
+            from ..storage.qdrant_store import QdrantConnectionManager
+            self.vector_stores[mod] = QdrantConnectionManager.get_instance(
+                url=os.getenv("QDRANT_URL"),
+                api_key=os.getenv("QDRANT_API_KEY"),
+                collection_name=f"{os.getenv('QDRANT_COLLECTION', 'hello_agents_vectors')}_perceptual_{mod}",
+                vector_size=self._get_dim_for_modality(mod),
+                distance=os.getenv("QDRANT_DISTANCE", "cosine"),
+            )
     
     def add(self, memory_item: MemoryItem) -> str:
         """添加感知记忆（SQLite权威 + Qdrant向量）"""
@@ -545,6 +537,7 @@ class PerceptualMemory(BaseMemory):
     
     def _encode_data(self, data: Any, modality: str) -> List[float]:
         """编码数据为固定维度向量（按模态维度对齐）"""
+        self._ensure_modality_ready(modality)
         target_dim = self._get_dim_for_modality(modality)
         encoder = self.encoders.get(modality, self._default_encoder)
         vec = encoder(data)
@@ -698,6 +691,7 @@ class PerceptualMemory(BaseMemory):
 
     def _get_vector_store_for_modality(self, modality: Optional[str]) -> QdrantVectorStore:
         mod = (modality or "text").lower()
+        self._ensure_modality_ready(mod)
         return self.vector_stores.get(mod, self.vector_stores["text"])
 
     def _get_dim_for_modality(self, modality: Optional[str]) -> int:

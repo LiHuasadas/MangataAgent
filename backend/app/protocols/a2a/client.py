@@ -54,7 +54,8 @@ class A2AClient:
         return AgentCard.model_validate(response.json())
 
     async def send_task(self, agent_url: str, text: str, *,
-                        context: TaskTenantContext, task_id: str | None = None) -> Task:
+                        context: TaskTenantContext, task_id: str | None = None,
+                        metadata: dict | None = None) -> Task:
         """向智能体发送一个新任务。
 
         Args:
@@ -74,7 +75,7 @@ class A2AClient:
         status = TaskStatus(state=TaskState.SUBMITTED, message=message)
         print(f"Status: {status}")
 
-        task = Task(id=task_id, status=status, tenant_context=context)
+        task = Task(id=task_id, status=status, tenant_context=context, metadata=metadata or {})
         print(f"Task: {task}")
 
         task_url = f"{agent_url.rstrip('/')}/tasks"

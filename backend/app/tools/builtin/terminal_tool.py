@@ -110,6 +110,15 @@ class TerminalTool(Tool):
         
         if not command:
             return "❌ 命令不能为空"
+
+        # Jev 毫秒级安全护栏检测 (场景 4)
+        try:
+            from backend.app.core.jev_service import JevService
+            is_safe, reason = JevService().check_security("terminal_command", command, str(self.workspace))
+            if not is_safe:
+                return f"❌ 安全拦截：{reason}"
+        except Exception as e:
+            print(f"⚠️ Jev 安全审查异常（非阻断）: {e}")
         
         # 解析命令
         try:

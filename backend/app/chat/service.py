@@ -25,6 +25,10 @@ class ChatService:
                       limit: int = 20) -> list[ChatMessage]:
         return self.repository.list_messages(user_id, conversation_id, after_sequence, limit)
 
+    def list_recent_messages(self, user_id: str, conversation_id: str,
+                             limit: int = 50) -> list[ChatMessage]:
+        return self.repository.list_recent_messages(user_id, conversation_id, limit)
+
     def get_turn(self, user_id: str, conversation_id: str, request_id: str) -> Turn | None:
         return self.repository.get_turn(user_id, conversation_id, request_id)
 

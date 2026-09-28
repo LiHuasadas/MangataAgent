@@ -76,7 +76,6 @@ class ContextBuilder:
         self.memory_tool = memory_tool
         self.rag_tool = rag_tool
         self.config = config or ContextConfig()
-        self._encoding = tiktoken.get_encoding("cl100k_base") # Tiktoken编码器
     
     def build(
         self,

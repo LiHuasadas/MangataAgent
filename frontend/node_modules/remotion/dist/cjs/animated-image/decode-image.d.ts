@@ -1,0 +1,18 @@
+import type { RemotionAnimatedImageLoopBehavior } from './props';
+export type AnimatedImageCacheItem = {
+    timeInSeconds: number;
+    frameIndex: number;
+    frame: VideoFrame | null;
+};
+export type RemotionImageDecoder = {
+    close: () => void;
+    getFrame: (i: number, loopBehavior: RemotionAnimatedImageLoopBehavior) => Promise<AnimatedImageCacheItem | null>;
+    frameCount: number;
+};
+export declare const decodeImage: ({ resolvedSrc, signal, requestInit, currentTime, initialLoopBehavior, }: {
+    resolvedSrc: string;
+    signal: AbortSignal;
+    requestInit?: RequestInit | undefined;
+    currentTime: number;
+    initialLoopBehavior: RemotionAnimatedImageLoopBehavior;
+}) => Promise<RemotionImageDecoder>;

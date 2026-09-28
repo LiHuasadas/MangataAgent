@@ -21,37 +21,52 @@ from ..tools.registry import ToolRegistry
 # 默认提示词模板
 DEFAULT_PROMPTS = {
     "initial": """
-请根据以下要求完成任务：
+你是一位严谨的高级代码审查架构师与自动化测试质检专家。
+你的职责是：针对用户提出的开发任务或待审查内容，建立高质量的基准实现或初步审查方案。
 
-任务: {task}
+任务要求:
+{task}
 
-请提供一个完整、准确的回答。
+请提供完整、准确、符合生产级规范的实现方案或基线代码。
 """,
     "reflect": """
-请仔细审查以下回答，并找出可能的问题或改进空间：
+你是一位顶级的代码评审专家（Code Reviewer）与质量测试仲裁者。
+你的职责是：对当前产出的代码和执行结果进行严苛的质量反思与漏洞审查。
 
-# 原始任务:
+# 原始任务目标:
 {task}
 
-# 当前回答:
+# 待审查的代码与执行/验证现状:
 {content}
 
-请分析这个回答的质量，指出不足之处，并提出具体的改进建议。
-如果回答已经很好，请回答"无需改进"。
+## 审查维度指南
+1. 正确性与逻辑自洽：是否存在逻辑死循环、边界条件失效、未处理的空值或异常？
+2. 测试验证状态：如果包含【实际验证结果】，重点分析自动化测试/命令执行是否报错（如 pytest 失败或终端报错）。
+3. 安全性与资源规范：是否有内存/句柄未释放、SQL/命令注入隐患、多租户路径未隔离等问题？
+4. 命名与工程规范：是否易于维护、注释清晰、结构优雅？
+
+## 判定准则（必须严格遵循）
+- 若发现任何逻辑缺陷、报错或可明确改进的漏洞，请明确列出具体的问题所在，并给出清晰、可执行的修改建议。
+- 若代码逻辑严密无误、实际验证测试全部通过，且达到工程交付标准，请在回答中明确包含"无需改进"（系统将据此认定质检通过并终止迭代）。
 """,
     "refine": """
-请根据反馈意见改进你的回答：
+你是一位精益求精的代码重构与缺陷修复专家。
+你的职责是：根据评审专家的反思反馈以及测试报错，对上一轮的代码实现进行针对性的修复与优化。
 
-# 原始任务:
+# 原始任务目标:
 {task}
 
-# 上一轮回答:
+# 上一轮实现方案:
 {last_attempt}
 
-# 反馈意见:
+# 评审员反馈与测试缺陷报告:
 {feedback}
 
-请提供一个改进后的回答。
+## 修复要求
+1. 直击要害：精准解决反馈中指出的缺陷与测试报错，不引入次生问题。
+2. 保持完整：输出优化重构后的完整高质量代码，并附带简要的修复点对照说明。
+
+请提供改进重构后的完整回答：
 """
 }
 
@@ -103,14 +118,14 @@ class ReflectionAgent(Agent):
         self,
         name: str,
         llm: HelloAgentsLLM,
+        user_id: str,
+        knowledge_base_path: str,
+        rag_namespace: str,
+        workspace: str,
         system_prompt: Optional[str] = None,
         config: Optional[Config] = None,
         max_iterations: int = 3,
         custom_prompts=None,
-        user_id: Optional[str] = None,
-        knowledge_base_path: Optional[str] = "./kb",  # 👈 新增参数
-        rag_namespace: Optional[str] = "reports",  # 👈 对应导入时的命名空间
-        workspace: Optional[str] = "./project_notes",
         host: str = "localhost",
         port: int = 8003,
         **kwargs  # 👈 接收额外参数
@@ -129,7 +144,7 @@ class ReflectionAgent(Agent):
         # 创建智能体名片
         agent_card = AgentCard(
             name="Reflection Agent",
-            description="通过工具验证、反思并改进结果",
+            description="代码深度审查、自动化测试物理验证与迭代重构",
             url=f"http://{host}:{port}",
             version="1.0.0",
             capabilities=Capabilities(
@@ -140,14 +155,14 @@ class ReflectionAgent(Agent):
             defaultOutputModes=["text"],
             skills=[
                 Skill(
-                    id="orchestration",
-                    name="Agent Orchestration",
-                    description="Delegates tasks to specialized agents"
+                    id="code_review",
+                    name="Code Review",
+                    description="代码质量深度审查与逻辑缺陷识别"
                 ),
                 Skill(
-                    id="conversation",
-                    name="Conversation Management",
-                    description="Manages multi-turn conversations"
+                    id="verification",
+                    name="Test & Verification",
+                    description="结合自动化测试命令运行物理验证与缺陷修复迭代"
                 )
             ]
         )
@@ -177,7 +192,7 @@ class ReflectionAgent(Agent):
             rag_tool=self.rag_tool,
             # """上下文构建配置"""
             config=ContextConfig(
-                max_tokens=8000,  # 总预算
+                max_tokens= 1000000,  # 总预算
                 reserve_ratio=0.15,  # 生成余量（10-20%）
                 min_relevance=0.3,  # 最小相关性阈值
                 enable_mmr=True,  # 启用最大边际相关性（多样性）

@@ -8,7 +8,7 @@ import uuid
 import ast
 import re
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Optional, Any, Awaitable, Callable
 
 
 from backend.app.context import ContextBuilder, ContextConfig
@@ -22,50 +22,61 @@ from backend.app.tools.builtin import SearchTool, TerminalTool, NoteTool, MCPToo
 from backend.app.tools.registry import ToolRegistry
 
 DEFAULT_ROUTER_PROMPT = """
-你是 Host Agent，多智能体系统的编排器。
-你的职责是：根据用户请求，选择需要调用的专长 Agent。
-你自己不直接回答业务问题，只做路由决策。
+你是 Host Agent，云端多租户编程与工程多智能体系统的总控架构师与调度编排器。
+你的唯一职责是：全面分析用户的开发任务诉求，将其拆解并路由给最合适的专长 Agent，或者编排一个顺序执行的 Agent 流水线。
+【核心纪律】你自己绝对不直接编写业务代码，不直接解答技术细节，只做精准的流程规划与路由决策。
 
-## 可用 Agent（来自启动时发现的 AgentCard）
+## 可用 Agent 注册表
 {agent_catalog}
 
-## 路由规则
-- plan_solve_agent：规划、多步骤任务和执行
-- react_agent：需要搜索、文件或其他工具的探索任务
-- reflection_agent：需要审查、验证和改进的结果
-- simple_agent：直接问答、写作与简单工具任务
-- 可多选；只有确实相关才选
-- 若都不相关，选择 simple_agent
-- 多 Agent 任务按列表顺序执行，后续 Agent 可看到前面结果
+## 各 Agent 职责定位与编排策略
+1. plan_solve_agent（技术调研与架构蓝图规划）：
+   - 角色定位：架构师与技术侦察兵（Scout & Architect）。
+   - 核心行为：先调用搜索工具（查官方文档）和文件/终端工具（探查代码现状），摸清真实环境后，输出《技术调研报告与详细施工图纸》。它不直接承担后续大段业务代码编写。
+2. react_agent（核心代码开发与施工主力）：
+   - 角色定位：主力建造工程师（Builder & Lead Developer）。
+   - 核心行为：接棒 plan_solve_agent 产出的精准施工图纸，使用文件与终端工具深入工程环境，完成真实代码编写、文件重构、动态调试与报错自愈。
+3. reflection_agent（代码审查与测试质检）：
+   - 角色定位：QA 质检官与测试审查员（Code Reviewer & Tester）。
+   - 核心行为：对写好的代码进行审查，并在终端真实运行测试命令验证。
+4. simple_agent（轻量快速直答）：
+   - 适用场景：概念解释、语法常识速查、简单的单点工具查询（如读单个文件、执行单条查询），无需多步规划与深度探索的场景。
+
+## 典型编排流水线示例
+- 复杂完整工程开发：["plan_solve_agent", "react_agent", "reflection_agent"]
+  （第1步：实地勘探与架构图纸设计 -> 第2步：主力接棒图纸进行真实编码与调试 -> 第3步：自动化测试验证与审查质检）
+- 聚焦型编码实现与质检：["react_agent", "reflection_agent"]
+- 纯架构/方案规划：["plan_solve_agent"]
+- 纯代码审查/测试排查：["reflection_agent"]
+- 日常单点问答/速查：["simple_agent"]
 
 ## 用户请求
 {question}
 
-## 输出格式（必须严格遵守）
-只输出一个 Python 列表，不要解释：
+## 输出要求（必须严格遵守）
+仅输出一个 Python 列表格式，严禁包含任何多余文字、开场白或解释：
 ```python
-["react_agent"]
-或
-["plan_solve_agent", "reflection_agent"]
+["plan_solve_agent", "react_agent", "reflection_agent"]
+```
 """
 
 DEFAULT_CONSOLIDATE_PROMPT = """
-你是 Host Agent 的结果汇总器。
+你是 Host Agent 的结果汇总器与工程交付报告生成器。
 
 ## 任务
-根据用户原问题与各专长 Agent 的回复，生成一段连贯、可读的 Markdown。
+结合用户提出的原始问题，系统化汇总各专长 Agent 产出的技术成果（规划方案、代码实现、测试与审查结果），生成一份专业、连贯、高可读性的工程交付报告（Markdown 格式）。
 
-## 规则
-1. 只使用各 Agent 已经给出的信息，不要发明它们没说过的事实
-2. 按 Agent 分节呈现，标题用二级标题，例如 ## Planning Agent
-3. 某个 Agent 失败时，写明失败，不要编造成功结果
-4. 开头用 1～2 句总述回答了什么；结尾可给一句简短建议（可选）
-5. 只输出 Markdown，不要解释你的汇总过程
+## 汇总规则
+1. 真实客观：严格基于各 Agent 实际产出的代码与事实，严禁主观臆造任何未发生的事实或伪代码。
+2. 结构清晰：按交付内容分节梳理，使用清晰的 Markdown 标题（例如：## 1. 架构规划方案、## 2. 代码实现与改动、## 3. 测试验证与代码审查）。
+3. 容错呈现：若某个 Agent 在执行中发生异常或未通过验证，客观指出失败原因与当前阻断点，不要掩盖问题。
+4. 交付摘要：开头用 1～2 句话精炼概括最终完成情况；结尾提供明确的后续使用或运行指引。
+5. 纯净输出：仅输出 Markdown 正文，不要输出任何元解释或关于你汇总过程的闲聊。
 
 ## 用户原问题
 {question}
 
-## 各 Agent 回复
+## 各 Agent 实际产出
 {agent_results}
 """
 
@@ -97,14 +108,11 @@ class HostAgent(Agent):
             api_key: ADK 模型的 API 密钥
             host: 绑定的主机地址
             port: 绑定的端口
-            data_agent_url: 数据分析智能体 URL
-            planning_agent_url: 规划智能体 URL
-            creative_agent_url: 创意智能体 URL
         """
         # 创建智能体名片
         agent_card = AgentCard(
             name="Host Agent",
-            description="协调专门的代理并管理对话流",
+            description="云端多租户多智能体总编排器与路由调度大脑",
             url=f"http://{host}:{port}",
             version="1.0.0",
             capabilities=Capabilities(
@@ -117,12 +125,12 @@ class HostAgent(Agent):
                 Skill(
                     id="orchestration",
                     name="Agent Orchestration",
-                    description="将任务委托给专业代理"
+                    description="任务意图分析与多智能体工作流流水线编排"
                 ),
                 Skill(
-                    id="conversation",
-                    name="Conversation Management",
-                    description="管理多回合对话"
+                    id="consolidation",
+                    name="Result Consolidation",
+                    description="多智能体产物整合与工程交付报告生成"
                 )
             ]
         )
@@ -170,7 +178,7 @@ class HostAgent(Agent):
             rag_tool=self.rag_tool,
             # """上下文构建配置"""
             config=ContextConfig(
-                max_tokens = 8000,  # 总预算
+                max_tokens = 1000000,  # 总预算
                 reserve_ratio = 0.15,  # 生成余量（10-20%）
                 min_relevance = 0.3,  # 最小相关性阈值
                 enable_mmr = True,  # 启用最大边际相关性（多样性）
@@ -229,7 +237,13 @@ class HostAgent(Agent):
             except Exception as e:
                 print(f"Error discovering {agent_type} agent: {e}")
 
-    async def handle_task(self, task: Task) -> Task:
+    async def handle_task(
+        self,
+        task: Task,
+        *,
+        conversation_history: Optional[list[LLMMessage]] = None,
+        progress_callback: Optional[Callable[[dict], Awaitable[None]]] = None,
+    ) -> Task:
         """处理一次编排任务。
 
         解析用户请求，决定调用哪些专长智能体，并汇总它们的回复。
@@ -256,15 +270,37 @@ class HostAgent(Agent):
                     message_text = part.text
                     break
 
+        if progress_callback:
+            await progress_callback({"type": "progress", "stage": "preparing", "message": "正在准备上下文"})
+
+        # Jev 前置意图打标与预研 (场景 1)
+        from backend.app.core.jev_service import JevService
+        jev = JevService()
+        jev_analysis = await asyncio.to_thread(jev.pre_analyze_request, message_text)
+        task.metadata["jev_analysis"] = jev_analysis
+
+        jev_prefix = f"""【Jev System-One 意图打标与预研】
+- 任务类型: {jev_analysis.get('task_type')}
+- 复杂度评分: {jev_analysis.get('complexity')}
+- 是否需要前置侦察调研: {jev_analysis.get('needs_scout')}
+- 来源: {jev_analysis.get('source')}
+
+"""
         # initialization of context builder
-        optimized_context = self.context_builder.build(
+        optimized_context = await asyncio.to_thread(lambda: self.context_builder.build(
             user_query=message_text,
-            conversation_history=self._history,
+            conversation_history=conversation_history if conversation_history is not None else self._history,
             system_instructions=None
-        )
+        ))
+        optimized_context = jev_prefix + optimized_context
 
         # 分析请求，决定要调用哪些智能体
+        if progress_callback:
+            await progress_callback({"type": "progress", "stage": "routing", "message": "正在分析请求"})
         agents_to_call = await self._analyze_request(optimized_context)
+        if progress_callback:
+            await progress_callback({"type": "progress", "stage": "routed", "agents": agents_to_call,
+                                     "message": "已选择专长智能体"})
         print(f"\n _analyze_request() Selected agents: {agents_to_call}\n")
 
         results = []
@@ -275,7 +311,25 @@ class HostAgent(Agent):
                 f"{item['agent_type']}: {item['response']}" for item in results if item['success']
             )
             delegated_message = message_text + (f"\n\n前序 Agent 的结果：\n{prior}" if prior else "")
-            results.append(await self._call_agent(agent_type, delegated_message, task.tenant_context))
+            import inspect
+            sig = inspect.signature(self._call_agent)
+            if progress_callback:
+                await progress_callback({"type": "progress", "stage": "agent_started",
+                                         "agent_type": agent_type, "message": f"{agent_type} 正在执行"})
+            call_kwargs = {}
+            if "metadata" in sig.parameters:
+                call_kwargs["metadata"] = task.metadata
+            if "progress_callback" in sig.parameters:
+                call_kwargs["progress_callback"] = progress_callback
+            result = await self._call_agent(agent_type, delegated_message, task.tenant_context, **call_kwargs)
+            results.append(result)
+            if progress_callback:
+                await progress_callback({"type": "progress", "stage": "agent_finished",
+                                         "agent_type": agent_type, "success": result.get("success", False),
+                                         "message": f"{agent_type} {'已完成' if result.get('success') else '执行失败'}"})
+                await progress_callback({"type": "agent_result", "agent_type": agent_type,
+                                         "success": result.get("success", False),
+                                         "response": result.get("response", "No response")})
 
         # 保存各 Agent 的原始回复到 metadata，供前端展示
 
@@ -291,10 +345,20 @@ class HostAgent(Agent):
         task.metadata["agent_results"] = agent_results_meta
         print(f"\nTask metadata: {task.metadata}\n")
 
+        if not results or not any(result.get("success") for result in results):
+            failures = "; ".join(
+                f"{result.get('agent_type', 'unknown')}: {result.get('response', 'unknown error')}"
+                for result in results
+            ) or "no specialist agents were selected"
+            raise RuntimeError(f"没有可用的专长智能体：{failures}")
+
         # 大模型 汇总结果
+        if progress_callback:
+            await progress_callback({"type": "progress", "stage": "consolidating", "message": "正在汇总结果"})
         consolidated_result = await self._consolidate_results(
             message_text,
-            results
+            results,
+            progress_callback=progress_callback,
         )
         print(f"\n _consolidate_results() Consolidated result: {consolidated_result}\n")
 
@@ -308,6 +372,42 @@ class HostAgent(Agent):
         # 合并各智能体产出的产物
         for result in results:
             task.artifacts.extend(result.get("artifacts", []))
+
+        final_answer = consolidated_result.get("response", "")
+
+        # 场景 2：Jev 后置智能记忆判定与自动持久化
+        try:
+            mem_decision = jev.evaluate_memory_update(message_text, final_answer)
+            if mem_decision and mem_decision.get("should_remember") and hasattr(self, "memory_tool"):
+                mem_type = mem_decision.get("memory_type", "working")
+                self.memory_tool.run({
+                    "action": "store",
+                    "memory_type": mem_type,
+                    "content": f"[Jev自动记忆] 关于需求 [{message_text[:80]}]: {final_answer[:250]}"
+                })
+                task.metadata["jev_memory_saved"] = mem_decision
+                print(f"🧠 Jev 自动触发记忆写入: {mem_type}")
+        except Exception as e:
+            print(f"⚠️ Jev 自动记忆更新非阻断异常: {e}")
+
+        # 场景 3：Jev 后置工程笔记自动判定与归档
+        try:
+            note_decision = jev.evaluate_note_update(message_text, final_answer)
+            if note_decision and note_decision.get("should_record_note") and hasattr(self, "note_tool"):
+                cat = note_decision.get("category", "task_blueprint")
+                note_title = f"Jev沉淀_{cat}_{task.id or 'turn'}"
+                self.note_tool.run({
+                    "action": "create",
+                    "title": note_title,
+                    "content": f"## {cat}\n\n**原始需求**: {message_text}\n\n**技术方案产出**:\n{final_answer}",
+                    "note_type": "conclusion",
+                    "tags": ["jev_auto", cat]
+                })
+                task.metadata["jev_note_saved"] = note_decision
+                print(f"📝 Jev 自动触发工程笔记沉淀: {note_title}")
+        except Exception as e:
+            print(f"⚠️ Jev 自动笔记沉淀非阻断异常: {e}")
+
         return task
 
     def _fromat_agent_results(self, result: List[Dict[str, Any]]) -> str:
@@ -369,7 +469,7 @@ class HostAgent(Agent):
 
         # 也可以直接：raw = self.llm.call(prompt)
         # raw 类似：'["planning", "creative"]'
-        raw = self.llm.call([
+        raw = await asyncio.to_thread(self.llm.call, [
             {"role": "system", "content": "你只做路由，只输出 Python 列表。"},
             {"role": "user", "content": prompt},
         ])
@@ -418,12 +518,16 @@ class HostAgent(Agent):
 
         return list(dict.fromkeys(a for a in agents if isinstance(a, str) and a in allowed)) or ["simple_agent"]
 
-    async def _call_agent(self, agent_type: str, message: str, context: TaskTenantContext) -> Dict[str, Any]:
+    async def _call_agent(self, agent_type: str, message: str, context: TaskTenantContext,
+                          metadata: Optional[Dict[str, Any]] = None,
+                          progress_callback: Optional[Callable[[dict], Awaitable[None]]] = None) -> Dict[str, Any]:
         """调用一个专长智能体。
 
         Args:
             agent_type: 智能体类型
             message: 发给该智能体的消息
+            context: 租户上下文
+            metadata: 任务元数据
 
         Returns:
             该智能体的响应
@@ -440,19 +544,20 @@ class HostAgent(Agent):
         try:
             # 向智能体发送任务
             # 第一步：单次请求（普通 await）
-            task = await self.client.send_task(agent_url, message, context=context)
+            task = await self.client.send_task(agent_url, message, context=context, metadata=metadata)
 
             # 订阅任务更新（用于流式进度）
-            responses = []
+            final_response = task
             # 第二步：流式订阅（async for）
             async for update in self.client.subscribe_to_task(agent_url, task.id, user_id=context.user_id):
-                # 完整实现里可以处理每一条流式更新
-                responses.append(update)
+                final_response = update
                 print(f"{agent_type} Agent Thinking: {update}")
+                if progress_callback:
+                    await progress_callback({"type": "progress", "stage": "agent_update",
+                                             "agent_type": agent_type, "state": update.status.state.value,
+                                             "message": f"{agent_type}: {update.status.state.value}"})
 
             # 取最终结果
-            final_response = responses[-1] if responses else task
-
             # 提取回复文本：收集全部文本片段，避免丢失多段回复
             text_parts = []
             if (final_response.status.message and
@@ -480,7 +585,8 @@ class HostAgent(Agent):
     async def _consolidate_results(
         self,
         original_message: str,
-        results: List[Dict[str, Any]]
+        results: List[Dict[str, Any]],
+        progress_callback: Optional[Callable[[dict], Awaitable[None]]] = None,
     ) -> Dict[str, Any]:
         """汇总多个智能体的结果。
 
@@ -503,10 +609,25 @@ class HostAgent(Agent):
             #     {"role": "system", "content": "你只做路由，只输出 Python 列表。"},
             #     {"role": "user", "content": prompt},
             # ])
-            markdown = self.llm.call([
+            messages = [
                 {"role": "system", "content": "你只做汇总，只输出 Markdown 格式。"},
                 {"role": "user", "content": prompt},
-            ])
+            ]
+            if progress_callback and hasattr(self.llm, "stream_invoke"):
+                loop = asyncio.get_running_loop()
+
+                def collect_stream():
+                    chunks = []
+                    for chunk in self.llm.stream_invoke(messages):
+                        chunks.append(chunk)
+                        asyncio.run_coroutine_threadsafe(
+                            progress_callback({"type": "delta", "content": chunk}), loop
+                        ).result()
+                    return "".join(chunks)
+
+                markdown = await asyncio.to_thread(collect_stream)
+            else:
+                markdown = await asyncio.to_thread(self.llm.call, messages)
             # markdown = await asyncio.to_thread(lambda: self.llm.call(prompt))
             print(f"\n大模型汇总结果：\n{markdown}")
             return {"response" : (markdown or "").strip()}
@@ -528,17 +649,6 @@ class HostAgent(Agent):
             return {
                 "response": consolidated_text.strip()
             }
-
-    def run(self):
-        """启动智能体服务。"""
-        import uvicorn
-
-        # 先做智能体发现
-        event_loop = asyncio.get_event_loop()
-        event_loop.run_until_complete(self.startup())
-
-        # 再启动 HTTP 服务
-        uvicorn.run(self.app, host=self.host, port=self.port)
 
     def add_tool(self, tool):
         """
@@ -612,4 +722,15 @@ class HostAgent(Agent):
             execute_local_tool
         )
         print(f"✅ 本地工具 '{tool.name}' 注册成功，包含 {len(parameters)} 个参数说明")
+
+    def run(self):
+        """启动智能体服务。"""
+        import uvicorn
+
+        # 先做智能体发现
+        event_loop = asyncio.get_event_loop()
+        event_loop.run_until_complete(self.startup())
+
+        # 再启动 HTTP 服务
+        uvicorn.run(self.app, host=self.host, port=self.port)
 

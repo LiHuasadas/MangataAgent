@@ -397,7 +397,7 @@ class SemanticMemory(BaseMemory):
                     query_entities = [Entity(
                         entity_id=e["id"],
                         name=e["name"],
-                        entity_type=e["types"]
+                        entity_type=e.get("types") or "MISC"
                     ) for e in entities_by_name[:3]]
                 else:
                     return []

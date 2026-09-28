@@ -246,7 +246,7 @@ class Neo4jGraphStore:
             WHERE start.id <> related.id
             RETURN DISTINCT related, 
                    length(path) as distance,
-                   [rel in relationships(path) | types(rel)] as relationship_path
+                   [rel in relationships(path) | type(rel)] as relationship_path
             ORDER BY distance, related.name
             LIMIT $limit
             """

@@ -294,6 +294,8 @@ class HelloAgentsLLM:
         Yields:
             str: 流式响应的文本片段
         """
+        if isinstance(messages, str):
+            messages = [{"role": "user", "content": messages}]
         print(f"🧠 正在调用 {self.model} 模型...")
         try:
             response = self._client.chat.completions.create(
@@ -317,11 +319,13 @@ class HelloAgentsLLM:
             print(f"❌ 调用LLM API时发生错误: {e}")
             raise HelloAgentsException(f"LLM调用失败: {str(e)}")
 
-    def invoke(self, messages: list[dict[str, str]], **kwargs) -> str:
+    def invoke(self, messages: list[dict[str, str]] | str, **kwargs) -> str:
         """
         非流式调用LLM，返回完整响应。
         适用于不需要流式输出的场景。
         """
+        if isinstance(messages, str):
+            messages = [{"role": "user", "content": messages}]
         try:
             response = self._client.chat.completions.create(
                 model=self.model,
@@ -330,11 +334,17 @@ class HelloAgentsLLM:
                 max_tokens=kwargs.get('max_tokens', self.max_tokens),
                 **{k: v for k, v in kwargs.items() if k not in ['temperature', 'max_tokens']}
             )
-            return response.choices[0].message.content
+            return response.choices[0].message.content or ""
         except Exception as e:
             raise HelloAgentsException(f"LLM调用失败: {str(e)}")
 
-    def stream_invoke(self, messages: list[dict[str, str]], **kwargs) -> Iterator[str]:
+    def call(self, messages: list[dict[str, str]] | str, **kwargs) -> str:
+        """
+        支持智能体编排引擎的标准调用接口。
+        """
+        return self.invoke(messages, **kwargs)
+
+    def stream_invoke(self, messages: list[dict[str, str]] | str, **kwargs) -> Iterator[str]:
         """
         流式调用LLM的别名方法，与think方法功能相同。
         保持向后兼容性。

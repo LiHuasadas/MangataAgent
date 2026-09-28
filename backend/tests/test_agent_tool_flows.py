@@ -1,6 +1,8 @@
 """Exercise the original five Agent designs with deterministic tool responses."""
 
 import asyncio
+import sys
+from types import SimpleNamespace
 
 import pytest
 
@@ -10,6 +12,10 @@ from backend.app.agents.react_agent import ContextAwareAgent
 from backend.app.agents.reflection_agent import ReflectionAgent
 from backend.app.agents.simple_agent import SimpleAgent
 from backend.app.context import ContextBuilder
+from backend.app.core.llm import HelloAgentsLLM
+from backend.app.memory.types.semantic import SemanticMemory
+from backend.app.memory.types import perceptual as perceptual_module
+from backend.app.memory.base import MemoryConfig
 from backend.app.protocols.types import (
     Message, Task, TaskState, TaskStatus, TaskTenantContext, TextPart,
 )
@@ -80,12 +86,111 @@ def test_host_routes_all_four_agents_sequentially_with_tenant_context(tmp_path):
     task = Task(id="t1", tenant_context=context,
                 status=TaskStatus(state=TaskState.SUBMITTED,
                                   message=Message(parts=[TextPart(text="分析并检查")])) )
-    result = asyncio.run(host.handle_task(task))
+    events = []
+
+    async def on_progress(event):
+        events.append(event)
+
+    result = asyncio.run(host.handle_task(task, progress_callback=on_progress))
     assert result.status.state == TaskState.COMPLETED
     assert [item[0] for item in sent] == ["plan_solve_agent", "reflection_agent"]
     assert "plan_solve_agent 的事实结果" in sent[1][1]
     assert all(item[2] == "alice" for item in sent)
     assert len(result.metadata["agent_results"]) == 2
+    assert [event["stage"] for event in events if event["type"] == "progress"] == [
+        "preparing", "routing", "routed", "agent_started", "agent_finished",
+        "agent_started", "agent_finished", "consolidating",
+    ]
+    assert [event["agent_type"] for event in events if event["type"] == "agent_result"] == [
+        "plan_solve_agent", "reflection_agent",
+    ]
+
+
+def test_host_rejects_turn_when_all_selected_agents_fail(tmp_path):
+    llm = ScriptedLLM('["simple_agent"]')
+    host = HostAgent("host", llm, user_id="alice", knowledge_base_path=str(tmp_path),
+                     rag_namespace="test", workspace=str(tmp_path))
+
+    async def unavailable(agent_type, message, context):
+        return {"agent_type": agent_type, "success": False,
+                "response": "All connection attempts failed", "artifacts": []}
+
+    host._call_agent = unavailable
+    context = TaskTenantContext(user_id="alice", conversation_id="c1",
+                                request_id="r1", workspace_id="w1")
+    task = Task(id="t-failed", tenant_context=context,
+                status=TaskStatus(state=TaskState.SUBMITTED,
+                                  message=Message(parts=[TextPart(text="hello")])))
+
+    with pytest.raises(RuntimeError, match="simple_agent: All connection attempts failed"):
+        asyncio.run(host.handle_task(task))
+
+
+def test_llm_call_adapter_uses_invoke_message_format():
+    seen = []
+    llm = HelloAgentsLLM.__new__(HelloAgentsLLM)
+    llm.model = "test"
+    llm.temperature = 0.7
+    llm.max_tokens = None
+    llm._client = SimpleNamespace(chat=SimpleNamespace(completions=SimpleNamespace(
+        create=lambda **kwargs: (seen.append(kwargs) or SimpleNamespace(
+            choices=[SimpleNamespace(message=SimpleNamespace(content="ok"))])))))
+
+    assert llm.call("hello") == "ok"
+    assert seen[0]["messages"] == [{"role": "user", "content": "hello"}]
+
+
+def test_graph_search_accepts_legacy_entity_without_types():
+    memory = SemanticMemory.__new__(SemanticMemory)
+    memory._extract_entities = lambda query: []
+    memory.graph_store = SimpleNamespace(
+        search_entities_by_name=lambda **kwargs: [{"id": "legacy", "name": "Legacy"}],
+        find_related_entities=lambda **kwargs: [],
+        get_entity_relationships=lambda entity_id: [],
+    )
+
+    assert memory._graph_search("Legacy", limit=10) == []
+
+
+def test_perceptual_memory_loads_cached_models_on_first_modality_use(monkeypatch, tmp_path):
+    model_calls = []
+    store_calls = []
+
+    def load_model(name, **kwargs):
+        model_calls.append((name, kwargs))
+        return SimpleNamespace(config=SimpleNamespace(projection_dim=512))
+
+    fake_transformers = SimpleNamespace(
+        CLIPModel=SimpleNamespace(from_pretrained=load_model),
+        CLIPProcessor=SimpleNamespace(from_pretrained=load_model),
+        ClapModel=SimpleNamespace(from_pretrained=load_model),
+        ClapProcessor=SimpleNamespace(from_pretrained=load_model),
+    )
+    monkeypatch.setitem(sys.modules, "transformers", fake_transformers)
+    monkeypatch.delenv("PERCEPTUAL_ALLOW_MODEL_DOWNLOAD", raising=False)
+    monkeypatch.setattr(perceptual_module, "get_text_embedder", lambda: SimpleNamespace(dimension=384))
+    monkeypatch.setattr(perceptual_module, "SQLiteDocumentStore", lambda **kwargs: object())
+    from backend.app.memory.storage.qdrant_store import QdrantConnectionManager
+    def get_store(**kwargs):
+        store_calls.append(kwargs)
+        return object()
+
+    monkeypatch.setattr(QdrantConnectionManager, "get_instance", get_store)
+
+    memory = perceptual_module.PerceptualMemory(MemoryConfig(storage_path=str(tmp_path)))
+
+    assert model_calls == []
+    assert len(store_calls) == 1
+    assert store_calls[0]["collection_name"].endswith("_perceptual_text")
+    assert len(memory._encode_data("missing-image.png", "image")) == 512
+    assert len(model_calls) == 2
+    assert len(store_calls) == 2
+    assert store_calls[-1]["vector_size"] == 512
+    assert len(memory._encode_data("missing-audio.wav", "audio")) == 512
+    assert len(model_calls) == 4
+    assert len(store_calls) == 3
+    assert all(kwargs["local_files_only"] is True for _, kwargs in model_calls)
+    assert memory._get_dim_for_modality("image") == 512
 
 
 def test_specialist_a2a_request_rebinds_user_and_conversation(tmp_path):
@@ -149,3 +254,40 @@ def test_a2a_working_memory_scope_is_reused_only_within_same_conversation(tmp_pa
     run_task("alice", "two", "r3")
     assert agent._memory_scopes[("alice", "two")] is not first
     assert not agent._memory_scopes[("alice", "two")].memory_manager.memory_types["working"].memories
+
+
+def test_a2a_workspace_dynamic_isolation(tmp_path):
+    llm = ScriptedLLM('Action: terminal[{"command":"echo hello_user"}]', 'Finish[done]')
+    agent = ContextAwareAgent("coder", llm, user_id="initial", workspace=str(tmp_path))
+    original_workspace = agent.terminal.workspace
+
+    context = TaskTenantContext(user_id="user_bob", conversation_id="conv_1",
+                                request_id="req_1", workspace_id="ws_bob")
+    task = Task(
+        id="t_ws",
+        tenant_context=context,
+        status=TaskStatus(state=TaskState.SUBMITTED, message=Message(parts=[TextPart(text="write code")])),
+    )
+    result = asyncio.run(agent.handle_task(task))
+    assert result.status.state == TaskState.COMPLETED
+    assert agent.terminal.workspace == original_workspace
+    user_isolated_dir = tmp_path / "user_bob" / "ws_bob"
+    assert user_isolated_dir.exists()
+
+
+def test_reflection_agent_executes_validation_command_from_metadata(tmp_path):
+    llm = ScriptedLLM("初稿代码", "无需改进")
+    agent = ReflectionAgent("tester", llm, user_id="alice", workspace=str(tmp_path))
+
+    context = TaskTenantContext(user_id="alice", conversation_id="c1",
+                                request_id="r1", workspace_id="w1")
+    task = Task(
+        id="t_val",
+        tenant_context=context,
+        status=TaskStatus(state=TaskState.SUBMITTED, message=Message(parts=[TextPart(text="审查代码")])),
+        metadata={"validation_command": "echo test_passed"},
+    )
+    result = asyncio.run(agent.handle_task(task))
+    assert result.status.state == TaskState.COMPLETED
+    reply_text = result.status.message.parts[0].text
+    assert "test_passed" in reply_text

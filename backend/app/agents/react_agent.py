@@ -19,36 +19,37 @@ from ..tools.registry import ToolRegistry
 from ..tools.builtin import TerminalTool
 
 # 默认ReAct提示词模板
-DEFAULT_REACT_PROMPT = """你是一个具备推理和行动能力的AI助手。你可以通过思考分析问题，然后调用合适的工具来获取信息，最终给出准确的答案。
+DEFAULT_REACT_PROMPT = """你是一名顶尖的全栈软件研发工程师与深度交互排错专家（ReAct Deep Coder）。
+你的核心职责是：针对用户的代码编写、系统调试、未知 Bug 排查或项目重构任务，通过严密的“思考-行动-观察”循环（Thought -> Action -> Observation），深入工程环境并动手解决实际问题。
 
-## 可用工具
+## 可用工具集（本地工具与 MCP 扩展）
 {tools}
 
-## 工作流程
-请严格按照以下格式进行回应，每次只能执行一个步骤：
+## 核心行为准则
+1. 继承图纸，精准施工：如果前序 Agent（如 plan_solve_agent）已提供了《技术调研报告与施工图纸》，请务必将其作为核心施工依据，按部就班地落实每个子步骤的真实文件改动，绝不重蹈覆辙做重复的空想规划。
+2. 探查先行，杜绝臆想：面对代码修改或错误排查，优先使用文件或终端工具检查真实代码与环境，绝不凭空猜测文件路径或函数签名。
+3. 动手编码，真实落地：代码修改必须真实写入文件（通过 filesystem_mcp 或 terminal），确保代码完整、语法正确，不留未实现的伪代码或空 TODO。
+4. 试错与自愈：工具调用报错或命令执行失败时，在 Thought 中深入分析错误原因（如依赖缺失、语法报错、路径问题），并在下一步尝试修复它。
+5. 阶段性推进与结论：当通过多次工具交互完成编码、修改与自测后，输出 Finish[最终答案]，详细陈述所做修改、核心逻辑及运行结论。
 
-**Thought:** 分析当前问题，思考需要什么信息或采取什么行动。
-**Action:** 选择一个行动，格式必须是以下之一：
-- `{{tool_name}}[{{tool_input}}]` - 调用指定工具
-- `Finish[最终答案]` - 当你有足够信息给出最终答案时
+## 严格执行格式
+每次回复必须且仅能包含一组 Thought 和 Action，严禁跳步：
 
-## 重要提醒
-1. 每次回应必须包含Thought和Action两部分
-2. 工具调用的格式必须严格遵循：工具名[参数]
-3. 只有当你确信有足够信息回答问题时，才使用Finish
-4. 如果工具返回的信息不够，继续使用其他工具或相同工具的不同参数
+**Thought:** 分析当前环境观察结果（Observation），思考下一步具体需要编写什么代码、调用什么工具或传参理由。
+**Action:** 本次执行的具体动作，格式必须为以下之一：
+- `{{tool_name}}[{{tool_input}}]` - 调用指定工具（参数按工具要求传入合法 JSON 或文本）
+- `Finish[最终交付成果与修改详情]` - 当任务已完整达成且经过验证时，提供最终全面结论
 
 ## 当前任务
 **Question:** {question}
 
-## 执行历史
+## 交互与执行历史
 {history}
 
-## 当前时间
+## 当前运行时间
 {current_time}
 
-
-现在开始你的推理和行动："""
+现在，请开始你的思考与行动："""
 
 class ContextAwareAgent(Agent):
     """
@@ -67,15 +68,15 @@ class ContextAwareAgent(Agent):
         self,
         name: str,
         llm: HelloAgentsLLM,
+        user_id: str,
+        knowledge_base_path: str,
+        rag_namespace: str,
+        workspace: str,
         tool_registry: Optional[ToolRegistry] = None,
         system_prompt: Optional[str] = None,
         config: Optional[Config] = None,
         max_steps: int = 12,
         custom_prompt: Optional[str] = None,
-        user_id: Optional[str] = "user123",
-        knowledge_base_path: Optional[str] = "./kb",  # 👈 新增参数
-        rag_namespace: Optional[str] = "reports",  # 👈 对应导入时的命名空间
-        workspace: Optional[str] = "./project_notes",
         host: str = "localhost",
         port: int = 8002,
         **kwargs  # 👈 接收额外参数
@@ -95,7 +96,7 @@ class ContextAwareAgent(Agent):
         # 创建智能体名片
         agent_card = AgentCard(
             name="ReAct Agent",
-            description="通过推理和工具行动完成任务",
+            description="基于 ReAct 范式的深度代码编写、环境交互与调试排错",
             url=f"http://{host}:{port}",
             version="1.0.0",
             capabilities=Capabilities(
@@ -106,14 +107,14 @@ class ContextAwareAgent(Agent):
             defaultOutputModes=["text"],
             skills=[
                 Skill(
-                    id="orchestration",
-                    name="Agent Orchestration",
-                    description="Delegates tasks to specialized agents"
+                    id="coding",
+                    name="Deep Coding",
+                    description="基于 ReAct 循环进行代码实现与文件编辑"
                 ),
                 Skill(
-                    id="conversation",
-                    name="Conversation Management",
-                    description="Manages multi-turn conversations"
+                    id="debugging",
+                    name="Interactive Debugging",
+                    description="利用终端与观察反馈进行动态交互排错"
                 )
             ]
         )
@@ -148,7 +149,15 @@ class ContextAwareAgent(Agent):
         self.context_builder = ContextBuilder(
             memory_tool = self.memory_tool,
             rag_tool = self.rag_tool,
-            config=ContextConfig(max_tokens=10000)
+            config=ContextConfig(
+                max_tokens= 1000000,
+                reserve_ratio=0.15,
+                min_relevance=0.3,
+                enable_mmr=True,
+                mmr_lambda=0.7,
+                system_prompt_template="",
+                enable_compression=True
+            )
         )
 
         # 注册工具

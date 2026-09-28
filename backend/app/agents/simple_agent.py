@@ -16,6 +16,15 @@ from ..tools.registry import ToolRegistry
 if TYPE_CHECKING:
     from ..tools.registry import ToolRegistry
 
+DEFAULT_SIMPLE_SYSTEM_PROMPT = """你是一个敏捷、高效且专业的轻量级开发助手。
+你的职责是：以极低的延迟、精准清晰的语言，回答用户的编程疑问、解释核心概念、编写简短算法片段，或执行单点快捷工具操作。
+
+## 行为准则
+1. 敏捷直答：针对日常问答与概念解析，直奔主题，给出精炼专业的解答，不展开繁复多余的宏观规划。
+2. 代码质量：提供的代码片段必须清晰、规范、开箱即用。
+3. 单点工具支持：当需要查阅文件、搜索信息或执行简单命令时，果断使用指定的工具语法进行调用。
+"""
+
 class SimpleAgent(Agent):
     """简单的对话Agent，支持可选的工具调用"""
 
@@ -23,14 +32,14 @@ class SimpleAgent(Agent):
         self,
         name: str,
         llm: HelloAgentsLLM,
+        user_id: str,
+        knowledge_base_path: str,
+        rag_namespace: str,
+        workspace: str,
         system_prompt: Optional[str] = None,
         config: Optional[Config] = None,
         tool_registry: Optional['ToolRegistry'] = None,
         enable_tool_calling: bool = True,
-        user_id: Optional[str] = None,
-        knowledge_base_path: Optional[str] = "./kb",  # 👈 新增参数
-        rag_namespace: Optional[str] = "reports",  # 👈 对应导入时的命名空间
-        workspace: Optional[str] = "./project_notes",
         host: str = "localhost",
         port: int = 8004,
         **kwargs  # 👈 接收额外参数
@@ -50,7 +59,7 @@ class SimpleAgent(Agent):
         # 创建智能体名片
         agent_card = AgentCard(
             name="Simple Agent",
-            description="对话与工具调用",
+            description="轻量级编程问答与单轮工具快速响应",
             url=f"http://{host}:{port}",
             version="1.0.0",
             capabilities=Capabilities(
@@ -61,14 +70,14 @@ class SimpleAgent(Agent):
             defaultOutputModes=["text"],
             skills=[
                 Skill(
-                    id="orchestration",
-                    name="Agent Orchestration",
-                    description="Delegates tasks to specialized agents"
+                    id="quick_response",
+                    name="Quick Response",
+                    description="快速编程概念问答与代码片段解答"
                 ),
                 Skill(
-                    id="conversation",
-                    name="Conversation Management",
-                    description="Manages multi-turn conversations"
+                    id="single_tool_call",
+                    name="Single Tool Calling",
+                    description="单点工具调用与快捷文件/命令操作"
                 )
             ]
         )
@@ -93,7 +102,7 @@ class SimpleAgent(Agent):
             rag_tool=self.rag_tool,
             # """上下文构建配置"""
             config=ContextConfig(
-                max_tokens=8000,  # 总预算
+                max_tokens= 1000000,  # 总预算
                 reserve_ratio=0.15,  # 生成余量（10-20%）
                 min_relevance=0.3,  # 最小相关性阈值
                 enable_mmr=True,  # 启用最大边际相关性（多样性）
@@ -144,7 +153,7 @@ class SimpleAgent(Agent):
 
     def _get_enhanced_system_prompt(self) -> str:
         """构建增强的系统提示词，包含工具信息"""
-        base_prompt = self.system_prompt or "你是一个有用的AI助手。"
+        base_prompt = self.system_prompt or DEFAULT_SIMPLE_SYSTEM_PROMPT
 
         if not self.enable_tool_calling or not self.tool_registry:
             return base_prompt

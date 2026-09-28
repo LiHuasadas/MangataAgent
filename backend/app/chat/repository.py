@@ -174,6 +174,20 @@ class RedisConversationRepository:
             raise RuntimeError("message index is inconsistent")
         return [ChatMessage.model_validate_json(value) for value in values]
 
+    def list_recent_messages(self, user_id: str, conversation_id: str,
+                             limit: int = 50) -> list[ChatMessage]:
+        if not 1 <= limit <= 100:
+            raise ValueError("invalid pagination")
+        self.get_conversation(user_id, conversation_id)
+        _, messages_key, order_key, _ = self._keys(user_id, conversation_id)
+        ids = self.redis.zrevrange(order_key, 0, limit - 1)
+        if not ids:
+            return []
+        values = self.redis.hmget(messages_key, ids)
+        if any(value is None for value in values):
+            raise RuntimeError("message index is inconsistent")
+        return [ChatMessage.model_validate_json(value) for value in reversed(values)]
+
     def get_turn(self, user_id: str, conversation_id: str, request_id: str) -> Turn | None:
         self.get_conversation(user_id, conversation_id)
         keys = self._keys(user_id, conversation_id, request_id)
