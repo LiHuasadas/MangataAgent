@@ -2,6 +2,10 @@ FROM python:3.11-slim
 
 WORKDIR /app
 
+# 替换为阿里云镜像源，解决国内服务器访问 deb.debian.org 极慢的问题
+RUN sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i 's/deb.debian.org/mirrors.aliyun.com/g' /etc/apt/sources.list 2>/dev/null || true
+
 # 安装必要的系统构建库与工具
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
@@ -16,8 +20,8 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
 COPY backend/requirements-api.txt backend/requirements-api.txt
 COPY backend/requirements-agents.txt backend/requirements-agents.txt
 
-# 使用 uv 进行极速系统级依赖安装（耗时从数分钟降至数秒）
-RUN uv pip install --system --no-cache -r backend/requirements-agents.txt
+# 使用 uv 进行极速系统级依赖安装（配置阿里云 PyPI 镜像源，数秒完成）
+RUN uv pip install --system --no-cache -i https://mirrors.aliyun.com/pypi/simple/ -r backend/requirements-agents.txt
 
 # 拷贝项目全量代码
 COPY . /app
