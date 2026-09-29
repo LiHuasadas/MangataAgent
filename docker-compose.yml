@@ -1,0 +1,126 @@
+version: '3.8'
+
+services:
+  # --------------------------------------------------------------------------
+  # 1. Redis 会话与分布式锁服务 (必需)
+  # --------------------------------------------------------------------------
+  redis:
+    image: redis:7-alpine
+    container_name: mangata-redis
+    restart: always
+    command: redis-server --appendonly yes
+    volumes:
+      # 挂载到宿主机 /data/mangata/redis
+      - /data/mangata/redis:/data
+    networks:
+      - app-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # --------------------------------------------------------------------------
+  # 2. Qdrant 向量数据库服务 (用于智能体长记忆检索与 RAG)
+  # --------------------------------------------------------------------------
+  qdrant:
+    image: qdrant/qdrant:v1.12.0
+    container_name: mangata-qdrant
+    restart: always
+    environment:
+      - QDRANT__SERVICE__API_KEY=${QDRANT_API_KEY:-hello-agents-key}
+    volumes:
+      # 挂载到宿主机 /data/mangata/qdrant
+      - /data/mangata/qdrant:/qdrant/storage
+    networks:
+      - app-net
+    ports:
+      # 映射到本机回环地址，提供本地可视化控制台 (http://localhost:6333/dashboard)
+      - "127.0.0.1:6333:6333"
+    healthcheck:
+      test: ["CMD-SHELL", "bash -c 'cat < /dev/null > /dev/tcp/localhost/6333'"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  # --------------------------------------------------------------------------
+  # 3. Neo4j 图数据库服务 (用于知识图谱与复杂关系推理)
+  # --------------------------------------------------------------------------
+  neo4j:
+    image: neo4j:5-community
+    container_name: mangata-neo4j
+    restart: always
+    environment:
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-12345}
+      - NEO4J_PLUGINS=["apoc"]
+      - NEO4J_server_memory_pagecache_size=512M
+      - NEO4J_server_memory_heap_initial__size=512M
+      - NEO4J_server_memory_heap_max__size=1G
+    volumes:
+      # 挂载到宿主机 /data/mangata/neo4j
+      - /data/mangata/neo4j/data:/data
+      - /data/mangata/neo4j/logs:/logs
+    networks:
+      - app-net
+    ports:
+      # 7474: Neo4j Web 浏览器控制台；7687: Bolt 协议端口
+      - "127.0.0.1:7474:7474"
+      - "127.0.0.1:7687:7687"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q --spider http://localhost:7474 || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 6
+
+  # --------------------------------------------------------------------------
+  # 4. MangataAgent 多智能体后端服务 (Host网关 + 4大专长Agent)
+  # --------------------------------------------------------------------------
+  backend:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.backend
+    container_name: mangata-backend
+    restart: always
+    depends_on:
+      redis:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+    env_file:
+      - backend/.env
+    environment:
+      # 在容器内统一重定向连接到 Docker 编排的服务名
+      - CHAT_REDIS_URL=redis://redis:6379/0
+      - QDRANT_URL=http://qdrant:6333
+      - NEO4J_URI=bolt://neo4j:7687
+      - A2A_HOST=0.0.0.0
+    volumes:
+      # 挂载代码施工区、知识库、长记忆到宿主机 /data/mangata 目录
+      - /data/mangata/project:/app/project
+      - /data/mangata/kb:/app/kb
+      - /data/mangata/memory_data:/app/memory_data
+    networks:
+      - app-net
+    # 仅将 Host 端口映射到本机回环地址（供运维排查调试或直接测试 API）
+    ports:
+      - "127.0.0.1:8000:8000"
+
+  # --------------------------------------------------------------------------
+  # 5. 前端 Web UI (Docker 自动打包运行，仅在 app-net 内网提供服务，由外部现有 Nginx 统一反代)
+  # --------------------------------------------------------------------------
+  frontend:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile.frontend
+    container_name: mangata-frontend
+    restart: always
+    depends_on:
+      - backend
+    networks:
+      - app-net
+
+networks:
+  app-net:
+    external: true

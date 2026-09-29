@@ -2,8 +2,10 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { colors, fonts } from '../styles/theme';
 import { Sparkles } from 'lucide-react';
+import { useResponsive } from '../hooks/useMediaQuery';
 
 export const Navbar: React.FC = () => {
+  const { isMobile } = useResponsive();
   const [scrolled, setScrolled] = useState(false);
 
   useEffect(() => {
@@ -20,7 +22,7 @@ export const Navbar: React.FC = () => {
         left: 0,
         right: 0,
         zIndex: 1000,
-        padding: '0 48px',
+        padding: isMobile ? '0 16px' : '0 48px',
         height: 64,
         display: 'flex',
         alignItems: 'center',
@@ -46,7 +48,7 @@ export const Navbar: React.FC = () => {
         <span
           style={{
             fontFamily: fonts.heading,
-            fontSize: 22,
+            fontSize: isMobile ? 18 : 22,
             color: colors.warmGold,
             fontWeight: 600,
             letterSpacing: '-0.01em',

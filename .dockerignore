@@ -1,0 +1,16 @@
+.git
+.gitignore
+.idea
+.vscode
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache
+.pytest_*
+venv
+.venv
+frontend/node_modules
+frontend/dist
+backend/**/__pycache__
+*.log

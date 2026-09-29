@@ -1,10 +1,12 @@
 import React from 'react';
 import { colors, fonts } from '../styles/theme';
+import { useResponsive } from '../hooks/useMediaQuery';
 
 export const EtymologySection: React.FC = () => {
+  const { isMobile } = useResponsive();
   return (
     <section id="about" style={{
-      position:'relative',background:colors.midnightDeep,padding:'120px 24px',
+      position:'relative',background:colors.midnightDeep,padding: isMobile ? '60px 16px' : '120px 24px',
       display:'flex',justifyContent:'center',overflow:'hidden',
     }}>
       <style>{`
@@ -42,7 +44,7 @@ export const EtymologySection: React.FC = () => {
 
       <div style={{maxWidth:700,textAlign:'center',position:'relative',zIndex:1}}>
         <h2 style={{
-          fontFamily:fonts.heading,fontSize:48,fontWeight:600,fontStyle:'italic',color:colors.warmGold,
+          fontFamily:fonts.heading,fontSize: isMobile ? 32 : 48,fontWeight:600,fontStyle:'italic',color:colors.warmGold,
           marginBottom:8,animation:'etymFadeUp 0.8s ease-out forwards',
           textShadow:`0 0 40px ${colors.warmGold}15`,
         }}>M&aring;ngata</h2>
@@ -59,14 +61,14 @@ export const EtymologySection: React.FC = () => {
           margin:'0 auto 48px',animation:'dividerGrow 1s ease-out 0.4s forwards',width:0,opacity:0,
         }}/>
 
-        <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:48,marginBottom:48}}>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap: isMobile ? 24 : 48,marginBottom:48}}>
           <div style={{animation:'wordSlideLeft 0.7s ease-out 0.6s forwards',opacity:0}}>
-            <div style={{fontFamily:fonts.heading,fontSize:32,color:colors.moonlightSilver,marginBottom:8,textShadow:`0 0 20px ${colors.moonlightSilver}10`}}>M&aring;ne</div>
+            <div style={{fontFamily:fonts.heading,fontSize: isMobile ? 22 : 32,color:colors.moonlightSilver,marginBottom:8,textShadow:`0 0 20px ${colors.moonlightSilver}10`}}>M&aring;ne</div>
             <div style={{fontFamily:fonts.body,fontSize:14,color:colors.coldSilverBlue,fontWeight:300,letterSpacing:'0.15em'}}>MOON</div>
           </div>
           <div style={{fontFamily:fonts.heading,fontSize:32,color:colors.warmGold,animation:'plusRotate 0.5s ease-out 0.8s forwards',opacity:0}}>+</div>
           <div style={{animation:'wordSlideRight 0.7s ease-out 0.6s forwards',opacity:0}}>
-            <div style={{fontFamily:fonts.heading,fontSize:32,color:colors.moonlightSilver,marginBottom:8,textShadow:`0 0 20px ${colors.moonlightSilver}10`}}>Gata</div>
+            <div style={{fontFamily:fonts.heading,fontSize: isMobile ? 22 : 32,color:colors.moonlightSilver,marginBottom:8,textShadow:`0 0 20px ${colors.moonlightSilver}10`}}>Gata</div>
             <div style={{fontFamily:fonts.body,fontSize:14,color:colors.coldSilverBlue,fontWeight:300,letterSpacing:'0.15em'}}>PATH</div>
           </div>
         </div>

@@ -112,16 +112,47 @@ class Planner:
         print(f"✅ 计划已生成:\n{response_text}")
 
         try:
-            match = re.search(r"\[[\s\S]*?\]", response_text)
-            plan_str = match.group(0) if match else response_text.strip()
-            plan = ast.literal_eval(plan_str)
-            return [step for step in plan if isinstance(step, str) and step.strip()] if isinstance(plan, list) else []
-        except (ValueError, SyntaxError, IndexError) as e:
-            print(f"❌ 解析计划时出错: {e}")
+            # 1. 优先提取 markdown 代码块内容
+            clean_text = response_text.strip()
+            code_block_match = re.search(r"```(?:python|json)?\s*([\s\S]*?)\s*```", clean_text)
+            if code_block_match:
+                clean_text = code_block_match.group(1).strip()
+
+            # 2. 贪婪匹配最外层的列表括号 [ ... ]，避免被步骤内部的 List[int] 或测试数据截断
+            match = re.search(r"\[[\s\S]*\]", clean_text)
+            candidate_str = match.group(0) if match else clean_text
+
+            # 3. 优先使用 json.loads 解析
+            try:
+                plan = json.loads(candidate_str)
+                if isinstance(plan, list):
+                    valid_steps = [str(step).strip() for step in plan if str(step).strip()]
+                    if valid_steps:
+                        return valid_steps
+            except Exception:
+                pass
+
+            # 4. 尝试 ast.literal_eval（兼容 Python 风格单引号与字面量）
+            try:
+                plan = ast.literal_eval(candidate_str)
+                if isinstance(plan, list):
+                    valid_steps = [str(step).strip() for step in plan if str(step).strip()]
+                    if valid_steps:
+                        return valid_steps
+            except Exception:
+                pass
+
+            # 5. 兜底方案：正则逐项提取带引号的“步骤/step”内容
+            items = re.findall(r'["\']((?:步骤|\d+\.|\bstep\b)[\s\S]*?)["\']', candidate_str, re.IGNORECASE)
+            if items:
+                return [it.strip() for it in items if it.strip()]
+
+            print(f"❌ 无法从模型响应中提取列表格式的步骤")
             print(f"原始响应: {response_text}")
             return []
         except Exception as e:
             print(f"❌ 解析计划时发生未知错误: {e}")
+            print(f"原始响应: {response_text}")
             return []
 
 

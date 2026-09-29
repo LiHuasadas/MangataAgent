@@ -88,18 +88,18 @@ def parse_args():
 
 def run_specialist(agent_name: str, host: str, port: int, model: str | None = None, base_url: str | None = None):
     """启动专长智能体。"""
-    from backend.app.agents.serve import create_specialist
+    from backend.app.main import create_specialist
     import uvicorn
 
-    agent, bound_port = create_specialist(
-        agent_type=agent_name,
-        port=port,
-        host=host,
-        model=model,
-        base_url=base_url,
-    )
-    print(f"🚀 [{agent.name}] 正在启动 -> http://{host}:{bound_port}")
-    uvicorn.run(agent.app, host=host, port=bound_port)
+    if model:
+        os.environ["LLM_MODEL_ID"] = model
+    if base_url:
+        os.environ["LLM_BASE_URL"] = base_url
+
+    norm_name = agent_name.removesuffix("_agent")
+    agent = create_specialist(name=norm_name, host=host, port=port)
+    print(f"🚀 [{agent.name}] 正在启动 -> http://{host}:{port}")
+    uvicorn.run(agent.app, host=host, port=port)
 
 
 def run_host(host: str, port: int, model: str | None = None, base_url: str | None = None):

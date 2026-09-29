@@ -3,6 +3,7 @@ import { useNavigate, useSearchParams, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
 import { colors, fonts } from '../../styles/theme';
 import { Sparkles, User, Lock, ArrowLeft, AlertCircle, CheckCircle2 } from 'lucide-react';
+import { useResponsive } from '../../hooks/useMediaQuery';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
@@ -24,6 +25,7 @@ export const LoginPage: React.FC = () => {
   const [displayName, setDisplayName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const { isMobile } = useResponsive();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -60,9 +62,9 @@ export const LoginPage: React.FC = () => {
       <Link
         to="/"
         style={{
-          position: 'absolute',
-          top: 32,
-          left: 48,
+          position: isMobile ? 'relative' as const : 'absolute' as const,
+          top: isMobile ? 'auto' : 32,
+          left: isMobile ? 'auto' : 48,
           display: 'flex',
           alignItems: 'center',
           gap: 8,
@@ -70,6 +72,8 @@ export const LoginPage: React.FC = () => {
           fontSize: 14,
           textDecoration: 'none',
           transition: 'color 0.2s ease',
+          marginBottom: isMobile ? 20 : 0,
+          alignSelf: isMobile ? 'flex-start' : 'auto',
         }}
         onMouseEnter={(e) => ((e.target as HTMLElement).style.color = colors.warmGold)}
         onMouseLeave={(e) => ((e.target as HTMLElement).style.color = colors.coldSilverBlue)}
@@ -87,7 +91,7 @@ export const LoginPage: React.FC = () => {
           WebkitBackdropFilter: 'blur(24px)',
           border: `1px solid ${colors.warmGold}30`,
           borderRadius: 20,
-          padding: '40px 36px',
+          padding: isMobile ? '28px 20px' : '40px 36px',
           boxShadow: `0 24px 64px rgba(0, 0, 0, 0.5), 0 0 50px ${colors.warmGold}15`,
         }}
       >

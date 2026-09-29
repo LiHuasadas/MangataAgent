@@ -1,0 +1,21 @@
+[Unit]
+Description=MangataAgent Multi-Agent Cluster Service
+After=network.target redis-server.service
+
+[Service]
+Type=simple
+# 请根据实际服务器运行用户进行修改（如 www-data、ubuntu 或 root）
+User=root
+# 项目所在服务器绝对路径
+WorkingDirectory=/opt/MangataAgent
+# Python 虚拟环境与路径
+Environment="PATH=/opt/MangataAgent/venv/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin"
+EnvironmentFile=/opt/MangataAgent/backend/.env
+# 启动命令：启动全部智能体并监听在 127.0.0.1（由 Nginx 统一向外代理）
+ExecStart=/opt/MangataAgent/venv/bin/python main.py --agent all --host 127.0.0.1
+Restart=always
+RestartSec=5
+LimitNOFILE=65536
+
+[Install]
+WantedBy=multi-user.target

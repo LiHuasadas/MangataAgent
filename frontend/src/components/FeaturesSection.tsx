@@ -1,6 +1,7 @@
 import React from 'react';
 import { AgentFlowSVG } from './AgentFlowSVG';
 import { colors, fonts } from '../styles/theme';
+import { useResponsive } from '../hooks/useMediaQuery';
 
 const features = [
   { icon:'\u26A1', title:'\u667A\u80FD\u5206\u5DE5', titleEn:'Intelligent Division', description:'Five specialized agents work in concert, each bringing unique expertise to your codebase.' },
@@ -9,14 +10,15 @@ const features = [
 ];
 
 export const FeaturesSection: React.FC = () => {
+  const { isMobile } = useResponsive();
   return (
     <section id="features" style={{
       background:`linear-gradient(180deg,${colors.midnightDeep} 0%,${colors.midnightMid}40 50%,${colors.midnightDeep} 100%)`,
-      padding:'100px 24px',
+      padding: isMobile ? '60px 16px' : '100px 24px',
     }}>
       <div style={{maxWidth:960,margin:'0 auto 80px'}}><AgentFlowSVG/></div>
 
-      <div style={{maxWidth:1100,margin:'0 auto',display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:32}}>
+      <div style={{maxWidth:1100,margin:'0 auto',display:'grid',gridTemplateColumns: isMobile ? '1fr' : 'repeat(3,1fr)',gap:32}}>
         {features.map(f=>(
           <div key={f.titleEn} style={{
             background:'rgba(27,42,74,0.3)',backdropFilter:'blur(8px)',WebkitBackdropFilter:'blur(8px)',

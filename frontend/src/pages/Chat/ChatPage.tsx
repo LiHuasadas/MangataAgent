@@ -25,7 +25,10 @@ import {
   FolderGit2,
   User,
   LogOut,
+  Menu,
+  X,
 } from 'lucide-react';
+import { useResponsive } from '../../hooks/useMediaQuery';
 
 export const ChatPage: React.FC = () => {
   const navigate = useNavigate();
@@ -43,6 +46,9 @@ export const ChatPage: React.FC = () => {
   const [streamingAnswer, setStreamingAnswer] = useState<string>('');
   const [agentFeedback, setAgentFeedback] = useState<string[]>([]);
   const [streamingConvId, setStreamingConvId] = useState<string | null>(null);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
+
+  const { isMobile } = useResponsive();
 
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const activeConvRef = useRef<string | null>(null);
@@ -240,17 +246,68 @@ export const ChatPage: React.FC = () => {
         height: '100vh',
         background: colors.midnightDeep,
         paddingTop: 64, // below navbar
+        position: 'relative',
       }}
     >
+      {/* Mobile sidebar toggle */}
+      {isMobile && (
+        <button
+          onClick={() => setSidebarOpen(!sidebarOpen)}
+          style={{
+            position: 'fixed',
+            top: 72,
+            left: sidebarOpen ? 248 : 8,
+            zIndex: 1100,
+            background: `linear-gradient(135deg, ${colors.warmGold}, ${colors.pearlWhite})`,
+            border: 'none',
+            color: colors.midnightDeep,
+            borderRadius: '50%',
+            width: 36,
+            height: 36,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            boxShadow: `0 2px 12px ${colors.warmGold}40`,
+            transition: 'left 0.3s ease',
+          }}
+        >
+          {sidebarOpen ? <X size={18} /> : <Menu size={18} />}
+        </button>
+      )}
+
+      {/* Mobile sidebar overlay backdrop */}
+      {isMobile && sidebarOpen && (
+        <div
+          onClick={() => setSidebarOpen(false)}
+          style={{
+            position: 'fixed',
+            inset: 0,
+            zIndex: 900,
+            background: 'rgba(0, 0, 0, 0.5)',
+          }}
+        />
+      )}
+
       {/* Sidebar: Conversations */}
       <div
         style={{
-          width: 280,
+          width: isMobile ? 260 : 280,
           background: 'rgba(27, 42, 74, 0.3)',
           borderRight: `1px solid ${colors.warmGold}15`,
           display: 'flex',
           flexDirection: 'column',
           padding: '20px 16px',
+          ...(isMobile ? {
+            position: 'fixed',
+            top: 64,
+            left: sidebarOpen ? 0 : -270,
+            bottom: 0,
+            zIndex: 1000,
+            transition: 'left 0.3s ease',
+            background: 'rgba(11, 16, 38, 0.97)',
+            backdropFilter: 'blur(20px)',
+          } : {}),
         }}
       >
         <button
@@ -472,7 +529,7 @@ export const ChatPage: React.FC = () => {
       {/* Main Chat Area */}
       <div style={{ flex: 1, display: 'flex', flexDirection: 'column', position: 'relative' }}>
         {/* Messages Stream */}
-        <div style={{ flex: 1, overflowY: 'auto', padding: '32px 48px', display: 'flex', flexDirection: 'column', gap: 24 }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: isMobile ? '16px 12px' : '32px 48px', display: 'flex', flexDirection: 'column', gap: isMobile ? 16 : 24 }}>
           {messages.length === 0 && (
             <div
               style={{
@@ -587,17 +644,17 @@ export const ChatPage: React.FC = () => {
         {/* Bottom Input Area */}
         <div
           style={{
-            padding: '20px 48px 32px',
+            padding: isMobile ? '12px 12px 16px' : '20px 48px 32px',
             background: 'rgba(11, 16, 38, 0.9)',
             borderTop: `1px solid ${colors.warmGold}15`,
           }}
         >
-          <form onSubmit={handleSendMessage} style={{ display: 'flex', gap: 12 }}>
+          <form onSubmit={handleSendMessage} style={{ display: 'flex', gap: isMobile ? 8 : 12 }}>
             <input
               type="text"
               value={inputPrompt}
               onChange={(e) => setInputPrompt(e.target.value)}
-              placeholder="输入给智能体的开发或重构需求，例如: 帮我为工作空间新增一个健康检查 API 并编写测试..."
+              placeholder={isMobile ? '输入开发需求...' : '输入给智能体的开发或重构需求，例如: 帮我为工作空间新增一个健康检查 API 并编写测试...'}
               disabled={sending}
               style={{
                 flex: 1,
@@ -605,9 +662,10 @@ export const ChatPage: React.FC = () => {
                 border: `1px solid ${colors.warmGold}40`,
                 color: colors.moonlightSilver,
                 borderRadius: 24,
-                padding: '12px 24px',
-                fontSize: 14,
+                padding: isMobile ? '10px 16px' : '12px 24px',
+                fontSize: isMobile ? 13 : 14,
                 outline: 'none',
+                minWidth: 0,
               }}
             />
             <button
@@ -618,17 +676,18 @@ export const ChatPage: React.FC = () => {
                 border: 'none',
                 color: colors.midnightDeep,
                 borderRadius: 24,
-                padding: '0 28px',
+                padding: isMobile ? '0 16px' : '0 28px',
                 fontWeight: 600,
-                fontSize: 14,
+                fontSize: isMobile ? 13 : 14,
                 cursor: sending || !inputPrompt.trim() ? 'not-allowed' : 'pointer',
                 opacity: sending || !inputPrompt.trim() ? 0.6 : 1,
                 display: 'flex',
                 alignItems: 'center',
                 gap: 8,
+                flexShrink: 0,
               }}
             >
-              <Send size={16} /> 发送
+              <Send size={16} /> {isMobile ? '' : '发送'}
             </button>
           </form>
         </div>

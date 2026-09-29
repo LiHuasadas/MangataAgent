@@ -1,10 +1,12 @@
 import React from 'react';
 import { colors, fonts } from '../styles/theme';
+import { useResponsive } from '../hooks/useMediaQuery';
 
 export const CtaSection: React.FC = () => {
+  const { isMobile } = useResponsive();
   return (
     <section style={{
-      position:'relative',background:colors.midnightDeep,padding:'140px 24px',textAlign:'center',overflow:'hidden',
+      position:'relative',background:colors.midnightDeep,padding: isMobile ? '60px 16px' : '140px 24px',textAlign:'center',overflow:'hidden',
     }}>
       <style>{`
         @keyframes ctaOrbFloat {
@@ -45,13 +47,13 @@ export const CtaSection: React.FC = () => {
 
       <div style={{position:'relative',zIndex:1}}>
         <h2 style={{
-          fontFamily:fonts.heading,fontSize:40,fontWeight:600,color:colors.moonlightSilver,marginBottom:16,
+          fontFamily:fonts.heading,fontSize: isMobile ? 24 : 40,fontWeight:600,color:colors.moonlightSilver,marginBottom:16,
           textShadow:`0 0 40px ${colors.warmGold}12`,
         }}>Let Moonlight Guide Your Code</h2>
         <p style={{fontFamily:fonts.body,fontSize:18,fontWeight:300,color:colors.coldSilverBlue,marginBottom:48}}>
           Start building with MangataAgent today.
         </p>
-        <div style={{display:'flex',gap:20,justifyContent:'center'}}>
+        <div style={{display:'flex',gap: isMobile ? 12 : 20,justifyContent:'center',flexDirection: isMobile ? 'column' as const : 'row' as const, alignItems:'center'}}>
           <button className="cta-btn-primary" style={{
             fontFamily:fonts.body,fontSize:15,fontWeight:500,color:colors.midnightDeep,
             background:`linear-gradient(135deg,${colors.warmGold},${colors.pearlWhite})`,

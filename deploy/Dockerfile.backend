@@ -1,0 +1,36 @@
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# 安装必要的系统构建库与工具
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    curl \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+# 拷贝官方预编译的 uv / uvx 高性能二进制工具
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /bin/
+
+# 先复制依赖文件并利用 Docker 缓存层
+COPY backend/requirements-api.txt backend/requirements-api.txt
+COPY backend/requirements-agents.txt backend/requirements-agents.txt
+
+# 使用 uv 进行极速系统级依赖安装（耗时从数分钟降至数秒）
+RUN uv pip install --system --no-cache -r backend/requirements-agents.txt
+
+# 拷贝项目全量代码
+COPY . /app
+
+# 确保运行时目录存在
+RUN mkdir -p /app/project /app/kb /app/memory_data
+
+ENV PYTHONUNBUFFERED=1
+ENV PYTHONIOENCODING=utf-8
+ENV A2A_HOST=0.0.0.0
+
+# 暴露 Host Agent 网关(8000)及各专长智能体端口(8001-8004)
+EXPOSE 8000 8001 8002 8003 8004
+
+# 一键启动所有智能体集群
+CMD ["python", "main.py", "--agent", "all", "--host", "0.0.0.0"]

@@ -386,16 +386,29 @@ class QdrantVectorStore:
                 search_params = models.SearchParams(hnsw_ef=self.search_ef, exact=self.search_exact)
             except Exception:
                 search_params = None
-            search_result = self.client.search(
-                collection_name=self.collection_name,
-                query_vector=query_vector,
-                query_filter=query_filter,
-                limit=limit,
-                score_threshold=score_threshold,
-                with_payload=True,
-                with_vectors=False,
-                search_params=search_params
-            )
+            if hasattr(self.client, "query_points"):
+                response = self.client.query_points(
+                    collection_name=self.collection_name,
+                    query=query_vector,
+                    query_filter=query_filter,
+                    limit=limit,
+                    score_threshold=score_threshold,
+                    with_payload=True,
+                    with_vectors=False,
+                    search_params=search_params
+                )
+                search_result = response.points
+            else:
+                search_result = self.client.search(
+                    collection_name=self.collection_name,
+                    query_vector=query_vector,
+                    query_filter=query_filter,
+                    limit=limit,
+                    score_threshold=score_threshold,
+                    with_payload=True,
+                    with_vectors=False,
+                    search_params=search_params
+                )
             
             # 转换结果格式
             results = []

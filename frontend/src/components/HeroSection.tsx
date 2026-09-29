@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { MoonScene } from './MoonScene';
 import { colors, fonts } from '../styles/theme';
+import { useResponsive } from '../hooks/useMediaQuery';
 
 export const HeroSection: React.FC = () => {
   const navigate = useNavigate();
@@ -10,6 +11,7 @@ export const HeroSection: React.FC = () => {
   const buttonRef = useRef<HTMLButtonElement | null>(null);
   const [isHovered, setIsHovered] = useState(false);
   const [buttonTarget, setButtonTarget] = useState<{ x: number; y: number } | null>(null);
+  const { isMobile } = useResponsive();
 
   const handleStart = () => {
     if (user) {
@@ -58,7 +60,7 @@ export const HeroSection: React.FC = () => {
           position: 'relative',
           zIndex: 2,
           textAlign: 'center',
-          maxWidth: 860,
+          maxWidth: isMobile ? 400 : 860,
           padding: '0 24px',
           marginTop: -42,
           pointerEvents: 'auto',
@@ -68,7 +70,7 @@ export const HeroSection: React.FC = () => {
         <h1
           style={{
             fontFamily: fonts.heading,
-            fontSize: 72,
+            fontSize: isMobile ? 36 : 72,
             fontWeight: 700,
             color: colors.moonlightSilver,
             marginBottom: 20,
@@ -86,7 +88,7 @@ export const HeroSection: React.FC = () => {
           <p
             style={{
               fontFamily: fonts.heading,
-              fontSize: 27,
+              fontSize: isMobile ? 18 : 27,
               fontWeight: 400,
               fontStyle: 'italic',
               color: colors.warmGold,
@@ -101,7 +103,7 @@ export const HeroSection: React.FC = () => {
           <p
             style={{
               fontFamily: fonts.heading,
-              fontSize: 27,
+              fontSize: isMobile ? 18 : 27,
               fontWeight: 400,
               fontStyle: 'italic',
               color: colors.warmGold,
@@ -142,11 +144,11 @@ export const HeroSection: React.FC = () => {
               zIndex: 1,
               fontFamily: fonts.heading,
               fontStyle: 'italic',
-              fontSize: 19,
+              fontSize: isMobile ? 16 : 19,
               fontWeight: 600,
               color: colors.midnightDeep,
               letterSpacing: '0.04em',
-              padding: '15px 46px',
+              padding: isMobile ? '12px 32px' : '15px 46px',
               borderRadius: 32,
               cursor: 'pointer',
               background: isHovered

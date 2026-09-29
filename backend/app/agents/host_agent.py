@@ -280,12 +280,12 @@ class HostAgent(Agent):
         task.metadata["jev_analysis"] = jev_analysis
 
         jev_prefix = f"""【Jev System-One 意图打标与预研】
-- 任务类型: {jev_analysis.get('task_type')}
-- 复杂度评分: {jev_analysis.get('complexity')}
-- 是否需要前置侦察调研: {jev_analysis.get('needs_scout')}
-- 来源: {jev_analysis.get('source')}
+            - 任务类型: {jev_analysis.get('task_type')}
+            - 复杂度评分: {jev_analysis.get('complexity')}
+            - 是否需要前置侦察调研: {jev_analysis.get('needs_scout')}
+            - 来源: {jev_analysis.get('source')}
+            """
 
-"""
         # initialization of context builder
         optimized_context = await asyncio.to_thread(lambda: self.context_builder.build(
             user_query=message_text,

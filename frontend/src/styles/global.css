@@ -75,3 +75,32 @@ a:hover {
   background: var(--cold-silver-blue);
   border-radius: 3px;
 }
+
+/* Mobile-specific styles */
+@media (max-width: 768px) {
+  html {
+    -webkit-text-size-adjust: 100%;
+  }
+
+  /* Prevent zoom on input focus (iOS Safari) */
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+
+  /* Remove tap highlight */
+  * {
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Ensure safe area insets for notched devices */
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+  }
+
+  /* Hide scrollbar on mobile */
+  ::-webkit-scrollbar {
+    width: 0;
+    display: none;
+  }
+}

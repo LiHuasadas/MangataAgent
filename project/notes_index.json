@@ -1,7 +1,42 @@
 {
-  "notes": [],
+  "notes": [
+    {
+      "id": "note_20260928_111356_0",
+      "title": "Identity Baseline v1.0: 'Who Am I' Specification",
+      "type": "conclusion",
+      "tags": [
+        "identity",
+        "spec",
+        "production-ready"
+      ],
+      "created_at": "2026-09-28T11:13:56.115709"
+    },
+    {
+      "id": "note_20260928_114815_1",
+      "title": "冒泡排序基线实现 —— 生产级规范",
+      "type": "reference",
+      "tags": [
+        "python",
+        "sorting",
+        "bubble-sort",
+        "production-ready"
+      ],
+      "created_at": "2026-09-28T11:48:15.843127"
+    },
+    {
+      "id": "note_20260929_112822_2",
+      "title": " urgently needed: Please provide your Git repository URL and authentication method",
+      "type": "blocker",
+      "tags": [
+        "user_input_required",
+        "git_clone",
+        "critical"
+      ],
+      "created_at": "2026-09-29T11:28:22.629905"
+    }
+  ],
   "metadata": {
     "created_at": "2026-09-27T23:07:50.713285",
-    "total_notes": 0
+    "total_notes": 3
   }
 }

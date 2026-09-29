@@ -18,6 +18,7 @@ import {
   HardDrive,
   Layers,
 } from 'lucide-react';
+import { useResponsive } from '../../hooks/useMediaQuery';
 
 export const WorkspacePage: React.FC = () => {
   const navigate = useNavigate();
@@ -26,6 +27,7 @@ export const WorkspacePage: React.FC = () => {
 
   const [activeTab, setActiveTab] = useState<'git' | 'upload'>('git');
   const [targetWsInput, setTargetWsInput] = useState<string>(workspaceId);
+  const { isMobile } = useResponsive();
 
   useEffect(() => {
     const wsParam = searchParams.get('workspace_id');
@@ -166,7 +168,7 @@ export const WorkspacePage: React.FC = () => {
       style={{
         minHeight: '100vh',
         background: colors.midnightDeep,
-        padding: '100px 32px 64px',
+        padding: isMobile ? '80px 12px 40px' : '100px 32px 64px',
         maxWidth: 1280,
         margin: '0 auto',
       }}
@@ -186,7 +188,7 @@ export const WorkspacePage: React.FC = () => {
           <h1
             style={{
               fontFamily: fonts.heading,
-              fontSize: 32,
+              fontSize: isMobile ? 22 : 32,
               color: colors.moonlightSilver,
               display: 'flex',
               alignItems: 'center',
@@ -272,13 +274,14 @@ export const WorkspacePage: React.FC = () => {
           background: 'rgba(27, 42, 74, 0.3)',
           border: `1px solid ${colors.warmGold}20`,
           borderRadius: 12,
-          padding: '16px 24px',
+          padding: isMobile ? '12px 16px' : '16px 24px',
           marginBottom: 32,
           display: 'flex',
           justifyContent: 'space-between',
           alignItems: 'center',
           flexWrap: 'wrap',
-          gap: 16,
+          gap: isMobile ? 12 : 16,
+          flexDirection: isMobile ? 'column' as const : 'row' as const,
         }}
       >
         <form onSubmit={handleSwitchWorkspace} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -318,7 +321,7 @@ export const WorkspacePage: React.FC = () => {
         </form>
 
         {/* Stats Badges */}
-        <div style={{ display: 'flex', gap: 20, alignItems: 'center', fontSize: 13, color: colors.coldSilverBlue }}>
+        <div style={{ display: 'flex', gap: isMobile ? 12 : 20, alignItems: 'center', fontSize: 13, color: colors.coldSilverBlue, flexWrap: 'wrap' }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <Layers size={14} color={colors.warmGold} />
             <span>文件数: <strong style={{ color: colors.moonlightSilver }}>{status?.file_count || 0}</strong></span>
@@ -362,7 +365,7 @@ export const WorkspacePage: React.FC = () => {
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'minmax(360px, 1fr) minmax(360px, 1.2fr)',
+          gridTemplateColumns: isMobile ? '1fr' : 'minmax(360px, 1fr) minmax(360px, 1.2fr)',
           gap: 32,
         }}
       >
