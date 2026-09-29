@@ -54,9 +54,10 @@ services:
       - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-12345}
       # 允许 5 位及以上密码（避免 12345 触发 Neo4j 默认的最小 8 位密码限制）
       - NEO4J_dbms_security_auth__minimum__password__length=4
-      - NEO4J_server_memory_pagecache_size=512M
-      - NEO4J_server_memory_heap_initial__size=512M
-      - NEO4J_server_memory_heap_max__size=1G
+      # 针对 2G 内存小规格服务器深度优化内存分配（避免 OOM 崩溃）
+      - NEO4J_server_memory_pagecache_size=128M
+      - NEO4J_server_memory_heap_initial__size=128M
+      - NEO4J_server_memory_heap_max__size=256M
     volumes:
       # 挂载到宿主机 /data/mangata/neo4j
       - /data/mangata/neo4j/data:/data
